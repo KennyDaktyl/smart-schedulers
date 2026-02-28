@@ -11,6 +11,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt /tmp/requirements.txt
+COPY smart_common/requirements.txt /tmp/smart_common/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
 COPY . /app

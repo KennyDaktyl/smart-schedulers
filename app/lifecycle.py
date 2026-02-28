@@ -8,7 +8,6 @@ import sys
 
 from app.scheduler.engine import SchedulerEngine
 from smart_common.nats.client import nats_client
-from smart_common.smart_logging import setup_logging
 
 logger = logging.getLogger("smart-schedulers.lifecycle")
 

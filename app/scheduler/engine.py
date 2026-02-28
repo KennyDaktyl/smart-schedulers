@@ -86,7 +86,7 @@ class SchedulerEngine:
                 if not await self._acquire_entry_idempotency(entry=entry, minute_utc=minute_utc):
                     continue
 
-                provider_id = entry.power_provider_id or entry.microcontroller_power_provider_id
+                provider_id = entry.microcontroller_power_provider_id
                 provider = None
                 latest = None
                 if provider_id is not None:
@@ -210,4 +210,3 @@ def _db_session() -> Iterator[Session]:
             next(db_gen)
         except StopIteration:
             pass
-

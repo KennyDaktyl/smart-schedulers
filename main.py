@@ -7,7 +7,8 @@ import platform
 import sys
 
 from app.lifecycle import run
-from smart_common.smart_logging import install_task_logger, setup_logging
+from smart_common.smart_logging import setup_logging
+from smart_common.smart_logging.task_logging import install_task_logger
 
 install_task_logger()
 setup_logging()
@@ -31,6 +32,8 @@ def main() -> None:
         "REDIS_HOST",
         "REDIS_PORT",
         "NATS_URL",
+        "STREAM_NAME",
+        "SUBJECT",
     ):
         logger.info("ENV %s=%s", key, os.getenv(key))
 

@@ -16,7 +16,11 @@ docker compose up --build
 
 Serwis jest samodzielny (`build: .`) i działa z katalogu `smart-schedulers`.
 
-## Git submodule `smart_common` (repo referencyjne)
+`requirements.txt` deleguje bazowe zależności do submodułu:
+`-r smart_common/requirements.txt`.
+W tym serwisie trzymane są tylko dodatkowe runtime zależności schedulera.
+
+## Git submodule `smart_common`
 
 W katalogu serwisu przygotowana jest konfiguracja submodułu pod:
 `https://github.com/KennyDaktyl/smart_common`.
@@ -35,8 +39,18 @@ albo:
 ./scripts/init_smart_common_submodule.sh
 ```
 
-Submoduł jest referencyjny (`vendor/smart_common`), a runtime schedulera używa
-lokalnego pakietu `smart_common` w tym serwisie (modele/schematy/usługi schedulera).
+Submoduł jest montowany pod ścieżką `smart_common` i jest spójny z innymi serwisami
+(branch `develop`).
+
+Jeśli dostaniesz błąd:
+`fatal: Katalog gita podmodułu "smart_common" znaleziono lokalnie...`
+użyj:
+
+```bash
+git submodule add --force -b develop git@github.com:KennyDaktyl/smart_common.git smart_common
+git submodule sync --recursive
+git submodule update --init --recursive
+```
 
 ## Parametry runtime
 
@@ -50,6 +64,7 @@ lokalnego pakietu `smart_common` w tym serwisie (modele/schematy/usługi schedul
 - `REDIS_PORT`
 - `NATS_URL`
 - `STREAM_NAME`
+- `SUBJECT` (np. `device_communication.*.event.provider_current_energy`)
 - `BACKEND_PORT`
 - `PORT`
 - `LOG_DIR`

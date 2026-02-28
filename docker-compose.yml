@@ -3,6 +3,8 @@ services:
     build: .
     container_name: smart_energy_schedulers
     network_mode: host
+    command: >
+      python -m main
     working_dir: /app
     env_file:
       - .env
