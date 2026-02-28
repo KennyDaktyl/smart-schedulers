@@ -68,12 +68,18 @@ class SchedulerEngine:
         with _db_session() as db:
             repo = SchedulerRuntimeRepository(db)
             entries = repo.fetch_due_entries(day_of_week=day_of_week, hhmm=hhmm)
+            end_entries = repo.fetch_end_entries(day_of_week=day_of_week, hhmm=hhmm)
 
-        if not entries:
-            logger.info("Scheduler minute processed | minute=%s due_entries=0", minute_utc.isoformat())
+        if not entries and not end_entries:
+            logger.info(
+                "Scheduler minute processed | minute=%s due_entries=0 end_entries=0",
+                minute_utc.isoformat(),
+            )
             return
 
         allow_entries: list[DueSchedulerEntry] = []
+        switch_off_entries: list[DueSchedulerEntry] = []
+        skip_reason_counts: dict[str, int] = {}
 
         with _db_session() as db:
             repo = SchedulerRuntimeRepository(db)
@@ -111,6 +117,9 @@ class SchedulerEngine:
                     allow_entries.append(entry)
                     continue
 
+                reason_key = decision.trigger_reason or decision.kind.value
+                skip_reason_counts[reason_key] = skip_reason_counts.get(reason_key, 0) + 1
+
                 audit.create_event(
                     device_id=entry.device_id,
                     event_name=(
@@ -124,23 +133,45 @@ class SchedulerEngine:
                     pin_state=False,
                 )
 
+            for entry in end_entries:
+                if not await self._acquire_entry_idempotency(
+                    entry=entry,
+                    minute_utc=minute_utc,
+                    action="OFF",
+                ):
+                    continue
+                switch_off_entries.append(entry)
+
             db.commit()
 
-        tasks = [
+        allow_tasks = [
             asyncio.create_task(self._execute_allow_entry(entry), name=f"scheduler-device-{entry.device_id}")
             for entry in allow_entries
         ]
+        off_tasks = [
+            asyncio.create_task(self._execute_off_entry(entry), name=f"scheduler-device-off-{entry.device_id}")
+            for entry in switch_off_entries
+        ]
+        tasks = allow_tasks + off_tasks
         if tasks:
             results = await asyncio.gather(*tasks, return_exceptions=True)
             for result in results:
                 if isinstance(result, Exception):
-                    logger.exception("Allow action task failed", exc_info=result)
+                    logger.exception("Scheduler action task failed", exc_info=result)
 
         logger.info(
-            "Scheduler minute done | minute=%s allow_actions=%s",
+            "Scheduler minute done | minute=%s allow_actions=%s off_actions=%s",
             minute_utc.isoformat(),
             len(allow_entries),
+            len(switch_off_entries),
         )
+        if entries and not allow_entries:
+            logger.warning(
+                "Scheduler minute skipped all ON actions | minute=%s due_entries=%s skip_reasons=%s",
+                minute_utc.isoformat(),
+                len(entries),
+                skip_reason_counts,
+            )
 
     async def _execute_allow_entry(self, entry: DueSchedulerEntry) -> None:
         async with self._semaphore:
@@ -169,13 +200,41 @@ class SchedulerEngine:
             )
             db.commit()
 
+    async def _execute_off_entry(self, entry: DueSchedulerEntry) -> None:
+        async with self._semaphore:
+            ack = await self._command_service.send_switch_off_command(entry=entry)
+
+        with _db_session() as db:
+            repo = SchedulerRuntimeRepository(db)
+            audit = SchedulerAuditService(db)
+
+            if ack.ok and isinstance(ack.is_on, bool):
+                repo.update_device_state(
+                    device_id=entry.device_id,
+                    is_on=ack.is_on,
+                    changed_at=datetime.now(timezone.utc),
+                )
+
+            audit.create_event(
+                device_id=entry.device_id,
+                event_name=(
+                    DeviceEventName.DEVICE_OFF
+                    if ack.ok
+                    else DeviceEventName.SCHEDULER_ACK_FAILED
+                ),
+                trigger_reason="SCHEDULER_END_ACK_OK" if ack.ok else "SCHEDULER_END_ACK_FAILED",
+                pin_state=ack.is_on,
+            )
+            db.commit()
+
     async def _acquire_entry_idempotency(
         self,
         *,
         entry: DueSchedulerEntry,
         minute_utc: datetime,
+        action: str = "ON",
     ) -> bool:
-        idempotency_key = f"{entry.device_id}:{entry.slot_id}:{minute_utc.isoformat()}:ON"
+        idempotency_key = f"{entry.device_id}:{entry.slot_id}:{minute_utc.isoformat()}:{action}"
         return await self._idempotency.acquire(idempotency_key)
 
 
