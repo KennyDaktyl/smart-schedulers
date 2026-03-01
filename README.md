@@ -2,9 +2,11 @@
 
 `smart-schedulers` to osobny worker, który:
 - działa non-stop,
-- co minutę wylicza aktywne sloty schedulerów,
+- co minutę planuje aktywne sloty schedulerów (planner),
 - dla slotów z progiem mocy sprawdza świeżość i wartość ostatniego pomiaru providera,
-- wysyła komendę `DEVICE_COMMAND` (`is_on=true`) do agenta i czeka na ACK,
+- zapisuje komendy do trwałej kolejki `scheduler_commands`,
+- wysyła komendy `DEVICE_COMMAND` asynchronicznie (dispatcher),
+- konsumuje ACK stałą subskrypcją (ack-consumer),
 - zapisuje wynik do `device_events` jako `event_type=SCHEDULER`.
 
 ## Uruchomienie lokalne
@@ -68,7 +70,20 @@ git submodule update --init --recursive
 - `BACKEND_PORT`
 - `PORT`
 - `LOG_DIR`
-- `SCHEDULER_ACK_TIMEOUT_SEC` (domyślnie `10`)
+- `SCHEDULER_ACK_TIMEOUT_SEC` (domyślnie `3`)
 - `SCHEDULER_MAX_CONCURRENCY` (domyślnie `25`)
 - `SCHEDULER_IDEMPOTENCY_TTL_SEC` (domyślnie `120`)
 - `SCHEDULER_REDIS_PREFIX` (domyślnie `smart-schedulers`)
+- `SCHEDULER_ENABLE_PLANNER` (`true/false`, domyślnie `true`)
+- `SCHEDULER_ENABLE_DISPATCHER` (`true/false`, domyślnie `true`)
+- `SCHEDULER_ENABLE_ACK_CONSUMER` (`true/false`, domyślnie `true`)
+- `SCHEDULER_ENABLE_TIMEOUT_SWEEPER` (`true/false`, domyślnie `true`)
+- `SCHEDULER_PLANNER_BATCH_SIZE` (domyślnie `1000`)
+- `SCHEDULER_DISPATCH_BATCH_SIZE` (domyślnie `500`)
+- `SCHEDULER_DISPATCH_POLL_SEC` (domyślnie `0.2`)
+- `SCHEDULER_DISPATCH_MAX_RETRY` (domyślnie `1`)
+- `SCHEDULER_DISPATCH_RETRY_BACKOFF_SEC` (domyślnie `0.25`)
+- `SCHEDULER_DISPATCH_RETRY_JITTER_SEC` (domyślnie `0.25`)
+- `SCHEDULER_MAX_INFLIGHT_PER_MICROCONTROLLER` (domyślnie `1`)
+- `SCHEDULER_TIMEOUT_SWEEPER_INTERVAL_SEC` (domyślnie `1.0`)
+- `SCHEDULER_TIMEOUT_SWEEPER_BATCH_SIZE` (domyślnie `500`)
