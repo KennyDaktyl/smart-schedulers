@@ -3,3 +3,4 @@
 # smart-schedulers runtime extras (not pinned in smart_common requirements)
 redis==7.1.0
 fastapi==0.124.4
+sentry-sdk==2.53.0
