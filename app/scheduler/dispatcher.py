@@ -58,47 +58,51 @@ class SchedulerDispatcher:
             self._max_inflight_per_microcontroller,
         )
         while not self._stop_event.is_set():
-            now_utc = datetime.now(timezone.utc)
-            with _db_session() as db:
-                repo = SchedulerCommandRepository(db)
-                commands = repo.claim_pending_for_dispatch(
-                    limit=self._batch_size,
-                    now_utc=now_utc,
-                    ack_timeout_sec=self._ack_timeout_sec,
-                    max_inflight_per_microcontroller=self._max_inflight_per_microcontroller,
-                )
-                db.commit()
-
-            if not commands:
-                await self._sleep_or_stop(self._poll_interval_sec)
-                continue
-
-            results = await asyncio.gather(
-                *[self._publish(command) for command in commands],
-                return_exceptions=True,
-            )
-
-            failed_command_ids: list[UUID] = []
-            for command, result in zip(commands, results):
-                if isinstance(result, Exception):
-                    logger.exception(
-                        "Dispatcher task failed unexpectedly | command_id=%s",
-                        command.command_id,
-                        exc_info=result,
+            try:
+                now_utc = datetime.now(timezone.utc)
+                with _db_session() as db:
+                    repo = SchedulerCommandRepository(db)
+                    commands = repo.claim_pending_for_dispatch(
+                        limit=self._batch_size,
+                        now_utc=now_utc,
+                        ack_timeout_sec=self._ack_timeout_sec,
+                        max_inflight_per_microcontroller=self._max_inflight_per_microcontroller,
                     )
-                    failed_command_ids.append(command.command_id)
+                    db.commit()
+
+                if not commands:
+                    await self._sleep_or_stop(self._poll_interval_sec)
                     continue
-                if result is False:
-                    failed_command_ids.append(command.command_id)
 
-            if failed_command_ids:
-                await self._handle_publish_failures(failed_command_ids)
+                results = await asyncio.gather(
+                    *[self._publish(command) for command in commands],
+                    return_exceptions=True,
+                )
 
-            logger.info(
-                "Scheduler dispatcher batch processed | claimed=%s failed=%s",
-                len(commands),
-                len(failed_command_ids),
-            )
+                failed_command_ids: list[UUID] = []
+                for command, result in zip(commands, results):
+                    if isinstance(result, Exception):
+                        logger.exception(
+                            "Dispatcher task failed unexpectedly | command_id=%s",
+                            command.command_id,
+                            exc_info=result,
+                        )
+                        failed_command_ids.append(command.command_id)
+                        continue
+                    if result is False:
+                        failed_command_ids.append(command.command_id)
+
+                if failed_command_ids:
+                    await self._handle_publish_failures(failed_command_ids)
+
+                logger.info(
+                    "Scheduler dispatcher batch processed | claimed=%s failed=%s",
+                    len(commands),
+                    len(failed_command_ids),
+                )
+            except Exception:
+                logger.exception("Scheduler dispatcher loop failed; retrying")
+                await self._sleep_or_stop(self._poll_interval_sec)
 
         logger.info("Scheduler dispatcher stopped")
 
