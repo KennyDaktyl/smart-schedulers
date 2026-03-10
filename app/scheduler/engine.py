@@ -14,6 +14,7 @@ from smart_common.enums.device_event import DeviceEventName
 from smart_common.enums.scheduler import SchedulerCommandAction, SchedulerDayOfWeek
 from smart_common.repositories.scheduler_command_repository import SchedulerCommandRepository
 from smart_common.repositories.scheduler_runtime_repository import SchedulerRuntimeRepository
+from smart_common.schemas.automation_rule import AutomationRuleSource, source_metric_key
 from smart_common.schemas.scheduler_runtime import DecisionKind, DueSchedulerEntry
 from smart_common.services.scheduler_audit_service import SchedulerAuditService
 from smart_common.services.scheduler_decision_service import SchedulerDecisionService
@@ -75,6 +76,7 @@ class SchedulerEngine:
 
         provider_cache: dict[int, object | None] = {}
         measurement_cache: dict[int, object | None] = {}
+        metric_sample_cache: dict[tuple[int, str], object | None] = {}
 
         due_offset = 0
         while not self._stop_event.is_set():
@@ -104,6 +106,7 @@ class SchedulerEngine:
                     provider_id = entry.microcontroller_power_provider_id
                     provider = None
                     latest = None
+                    latest_metric_samples: dict[str, object | None] = {}
                     if provider_id is not None:
                         provider = provider_cache.get(provider_id)
                         if provider_id not in provider_cache:
@@ -115,11 +118,29 @@ class SchedulerEngine:
                             latest = runtime_repo.get_latest_measurement(provider_id)
                             measurement_cache[provider_id] = latest
 
+                        if entry.activation_rule is not None:
+                            metric_keys = {
+                                source_metric_key(condition.source)
+                                for condition in entry.activation_rule.conditions
+                                if condition.source != AutomationRuleSource.PROVIDER_PRIMARY_POWER
+                            }
+                            for metric_key in sorted(key for key in metric_keys if key):
+                                cache_key = (provider_id, metric_key)
+                                sample = metric_sample_cache.get(cache_key)
+                                if cache_key not in metric_sample_cache:
+                                    sample = runtime_repo.get_latest_metric_sample(
+                                        provider_id,
+                                        metric_key,
+                                    )
+                                    metric_sample_cache[cache_key] = sample
+                                latest_metric_samples[metric_key] = sample
+
                     decision = self._decision_service.decide(
                         entry=entry,
                         now_utc=minute_utc,
                         provider=provider,
                         latest_measurement=latest,
+                        latest_metric_samples=latest_metric_samples,
                     )
 
                     if decision.kind == DecisionKind.ALLOW_ON:
