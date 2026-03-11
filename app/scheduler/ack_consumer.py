@@ -61,6 +61,14 @@ class SchedulerAckConsumer:
 
             command_id = _parse_uuid(data.get("command_id"))
             if command_id is None:
+                ack_mode = data.get("mode")
+                if ack_mode != "SCHEDULE":
+                    logger.info(
+                        "Ignoring non-scheduler ACK without command_id | subject=%s payload=%s",
+                        msg.subject,
+                        raw,
+                    )
+                    return
                 logger.warning(
                     "ACK missing command_id; cannot correlate | subject=%s payload=%s",
                     msg.subject,

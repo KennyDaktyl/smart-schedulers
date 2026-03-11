@@ -164,6 +164,32 @@ class SchedulerEngine:
                     skipped += 1
                     reason_key = decision.trigger_reason or decision.kind.value
                     skip_reason_counts[reason_key] = skip_reason_counts.get(reason_key, 0) + 1
+                    if reason_key in {"POWER_STALE", "BATTERY_SOC_STALE"}:
+                        latest_power_ts = getattr(latest, "measured_at", None)
+                        latest_metric_timestamps = {
+                            metric_key: getattr(sample, "measured_at", None)
+                            for metric_key, sample in latest_metric_samples.items()
+                            if sample is not None
+                        }
+                        logger.warning(
+                            (
+                                "Scheduler skip due to stale provider telemetry | minute=%s "
+                                "device_id=%s slot_id=%s provider_id=%s reason=%s "
+                                "provider_expected_interval_sec=%s latest_power_measured_at=%s "
+                                "latest_metric_measured_at=%s"
+                            ),
+                            minute_utc.isoformat(),
+                            entry.device_id,
+                            entry.slot_id,
+                            provider_id,
+                            reason_key,
+                            getattr(provider, "expected_interval_sec", None),
+                            latest_power_ts.isoformat() if latest_power_ts else None,
+                            {
+                                key: value.isoformat() if value else None
+                                for key, value in latest_metric_timestamps.items()
+                            },
+                        )
                     audit.create_event(
                         device_id=entry.device_id,
                         event_name=(
