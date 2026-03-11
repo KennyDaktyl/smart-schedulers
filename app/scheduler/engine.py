@@ -14,7 +14,11 @@ from smart_common.enums.device_event import DeviceEventName
 from smart_common.enums.scheduler import SchedulerCommandAction, SchedulerDayOfWeek
 from smart_common.repositories.scheduler_command_repository import SchedulerCommandRepository
 from smart_common.repositories.scheduler_runtime_repository import SchedulerRuntimeRepository
-from smart_common.schemas.automation_rule import AutomationRuleSource, source_metric_key
+from smart_common.schemas.automation_rule import (
+    AutomationRuleSource,
+    iter_conditions,
+    source_metric_key,
+)
 from smart_common.schemas.scheduler_runtime import DecisionKind, DueSchedulerEntry
 from smart_common.services.scheduler_audit_service import SchedulerAuditService
 from smart_common.services.scheduler_decision_service import SchedulerDecisionService
@@ -121,7 +125,7 @@ class SchedulerEngine:
                         if entry.activation_rule is not None:
                             metric_keys = {
                                 source_metric_key(condition.source)
-                                for condition in entry.activation_rule.conditions
+                                for condition in iter_conditions(entry.activation_rule)
                                 if condition.source != AutomationRuleSource.PROVIDER_PRIMARY_POWER
                             }
                             for metric_key in sorted(key for key in metric_keys if key):
