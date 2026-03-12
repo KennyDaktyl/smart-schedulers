@@ -157,12 +157,21 @@ class SchedulerEngine:
                             if entry.control_mode == SchedulerControlMode.POLICY
                             else SchedulerCommandAction.ON
                         )
-                        command_payload = (
-                            entry.control_policy.model_dump(mode="json")
-                            if entry.control_mode == SchedulerControlMode.POLICY
-                            and entry.control_policy is not None
-                            else None
-                        )
+                        command_payload = {
+                            "scheduler_policy": (
+                                entry.control_policy.model_dump(mode="json")
+                                if entry.control_mode == SchedulerControlMode.POLICY
+                                and entry.control_policy is not None
+                                else None
+                            ),
+                            "device_dependency_rule": (
+                                entry.device_dependency_rule.model_dump(mode="json")
+                                if entry.device_dependency_rule is not None
+                                else None
+                            ),
+                        }
+                        if all(value is None for value in command_payload.values()):
+                            command_payload = None
                         inserted = command_repo.enqueue_command(
                             minute_key=minute_utc,
                             entry=entry,
@@ -254,9 +263,23 @@ class SchedulerEngine:
                             else SchedulerCommandAction.OFF
                         ),
                         command_payload=(
-                            entry.control_policy.model_dump(mode="json")
-                            if entry.control_mode == SchedulerControlMode.POLICY
-                            and entry.control_policy is not None
+                            {
+                                "scheduler_policy": (
+                                    entry.control_policy.model_dump(mode="json")
+                                    if entry.control_mode == SchedulerControlMode.POLICY
+                                    and entry.control_policy is not None
+                                    else None
+                                ),
+                                "device_dependency_rule": (
+                                    entry.device_dependency_rule.model_dump(mode="json")
+                                    if entry.device_dependency_rule is not None
+                                    else None
+                                ),
+                            }
+                            if (
+                                entry.control_policy is not None
+                                or entry.device_dependency_rule is not None
+                            )
                             else None
                         ),
                         trigger_reason=(
