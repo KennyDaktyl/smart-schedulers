@@ -11,7 +11,11 @@ from sqlalchemy.orm import Session
 from app.scheduler.idempotency import MinuteIdempotencyStore
 from smart_common.core.db import get_db
 from smart_common.enums.device_event import DeviceEventName
-from smart_common.enums.scheduler import SchedulerCommandAction, SchedulerDayOfWeek
+from smart_common.enums.scheduler import (
+    SchedulerCommandAction,
+    SchedulerControlMode,
+    SchedulerDayOfWeek,
+)
 from smart_common.repositories.scheduler_command_repository import SchedulerCommandRepository
 from smart_common.repositories.scheduler_runtime_repository import SchedulerRuntimeRepository
 from smart_common.schemas.automation_rule import (
@@ -148,10 +152,22 @@ class SchedulerEngine:
                     )
 
                     if decision.kind == DecisionKind.ALLOW_ON:
+                        command_action = (
+                            SchedulerCommandAction.ENABLE_POLICY
+                            if entry.control_mode == SchedulerControlMode.POLICY
+                            else SchedulerCommandAction.ON
+                        )
+                        command_payload = (
+                            entry.control_policy.model_dump(mode="json")
+                            if entry.control_mode == SchedulerControlMode.POLICY
+                            and entry.control_policy is not None
+                            else None
+                        )
                         inserted = command_repo.enqueue_command(
                             minute_key=minute_utc,
                             entry=entry,
-                            action=SchedulerCommandAction.ON,
+                            action=command_action,
+                            command_payload=command_payload,
                             trigger_reason=decision.trigger_reason,
                             measured_value=decision.measured_value,
                             measured_unit=decision.measured_unit,
@@ -232,8 +248,22 @@ class SchedulerEngine:
                     inserted = command_repo.enqueue_command(
                         minute_key=minute_utc,
                         entry=entry,
-                        action=SchedulerCommandAction.OFF,
-                        trigger_reason="SCHEDULER_END",
+                        action=(
+                            SchedulerCommandAction.DISABLE_POLICY
+                            if entry.control_mode == SchedulerControlMode.POLICY
+                            else SchedulerCommandAction.OFF
+                        ),
+                        command_payload=(
+                            entry.control_policy.model_dump(mode="json")
+                            if entry.control_mode == SchedulerControlMode.POLICY
+                            and entry.control_policy is not None
+                            else None
+                        ),
+                        trigger_reason=(
+                            "SCHEDULER_POLICY_WINDOW_END"
+                            if entry.control_mode == SchedulerControlMode.POLICY
+                            else "SCHEDULER_END"
+                        ),
                         now_utc=minute_utc,
                     )
                     if inserted:

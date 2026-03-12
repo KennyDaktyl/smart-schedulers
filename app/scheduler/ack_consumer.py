@@ -159,7 +159,10 @@ def _event_name_for_ack(
 ) -> DeviceEventName:
     if status != SchedulerCommandStatus.ACK_OK:
         return DeviceEventName.SCHEDULER_ACK_FAILED
-    if action == SchedulerCommandAction.ON:
+    if action in {
+        SchedulerCommandAction.ON,
+        SchedulerCommandAction.ENABLE_POLICY,
+    }:
         return DeviceEventName.SCHEDULER_TRIGGER_ON
     return DeviceEventName.DEVICE_OFF
 
